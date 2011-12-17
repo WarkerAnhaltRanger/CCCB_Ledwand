@@ -71,6 +71,7 @@ int main(int argc, char **argv)
     gst_app_sink_set_emit_signals ((GstAppSink*) ledsink, TRUE);
     g_object_set(playbin2, "uri", "file:///home/warker/tmp/quarks.mp4", NULL);
     g_object_set(playbin2, "video-sink", ledsink, NULL);
+    g_object_set(playbin2, "flags", 0x01, NULL);
     gst_bus_add_watch (omnibus, playbin2_bus_callback, NULL);
     g_signal_connect (ledsink, "new-buffer",  G_CALLBACK (on_new_buffer), NULL);
     loop = g_main_loop_new(NULL, FALSE);
