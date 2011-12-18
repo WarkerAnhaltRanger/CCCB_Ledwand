@@ -143,12 +143,15 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
 
         if(oldpixel > LEDWAND_BIAS){
             buffer[i>>3] |= 1 << (7-(i%8));
-            diff = (oldpixel & 0xFF) - 255;
+            diff = oldpixel - 255;
+            if(oldpixel >= 255)
+                diff = 0;
         }
         else{
-            if(oldpixel < 0) oldpixel = 0;
-            diff = oldpixel;
             buffer[i>>3] |= 0 << (7-(i%8));
+            diff = oldpixel;
+            if(oldpixel <= 0)
+                diff = 0;
         }
         tmpbuffer[i+1] += 7 * diff / 16;
         tmpbuffer[i+447] += 3 * diff / 16;
@@ -164,12 +167,15 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
 
         if(oldpixel > LEDWAND_BIAS){
             buffer[i>>3] |= 1 << (7-(i%8));
-            diff = (oldpixel & 0xFF) - 255;
+            diff = oldpixel - 255;
+            if(oldpixel >= 255)
+                diff = 0;
         }
         else{
-            if(oldpixel < 0) oldpixel = 0;
-            diff = oldpixel;
             buffer[i>>3] |= 0 << (7-(i%8));
+            diff = oldpixel;
+            if(oldpixel <= 0)
+                diff = 0;
         }
         tmpbuffer[i+1] += 7 * diff / 16;
         tmpbuffer[i+447] += 3 * diff / 16;
