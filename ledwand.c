@@ -89,102 +89,41 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
     int16_t oldpixel = 0;
     signed short diff = 0;
 
-#ifdef DENIS
-    //++++++++++++++++++++++++++++++++++++++++ DENIS
-	int row = 0, column = 0;
-    uint8_t newpixel = 0;
-
-	for (row = 0; row < 240; row++)
-	{
-		for (column = 0; column < 448; column++)
-		{
-			oldpixel = tmpbuffer[row*448+column];
-
-			newpixel = (oldpixel > LEDWAND_BIAS) << (7-(column%8));
-			buffer[row*56+column/8] |= newpixel;
-			newpixel = (oldpixel > LEDWAND_BIAS) ? 255 : 0;
-			diff = oldpixel - newpixel;
-
-			tmpbuffer[row*448+(column+1)] += 7 * diff / 16;
-            tmpbuffer[(row+1)*448+(column-1)] += 3 * diff / 16;
-			tmpbuffer[(row+1)*448+column] += 5 * diff / 16;
-			tmpbuffer[(row+1)*448+(column+1)] += 1 * diff / 16;
-		}
-	}
-
-
-#else
-    // +++++++++++++++++++++++++++++++++ MEIN CODE
-    for(i = 0; i < (448*240); i++){
-        tmpbuffer[i] = buffer[i];
-    }
-    bzero(buffer, buf_len);
-
-    buffer[0] = tmpbuffer[0] & 0x80;
-    /*
-    oldpixel =  tmpbuffer[i] * 5 - tmpbuffer[i+449] - tmpbuffer[i+448] - tmpbuffer[i+447] - tmpbuffer[i+1];
-    if(oldpixel > LEDWAND_BIAS){
-        buffer[i>>3] |= 1 << (7-(i%8));
-        diff = (oldpixel & 0xFF) - 255;
-    }
-    else{
-        if(oldpixel < 0) oldpixel = 0;
-        diff = oldpixel;
-        buffer[i>>3] |= 0 << (7-(i%8));
-    }
-    tmpbuffer[i+1] += 7 * diff / 16;
-    tmpbuffer[i+447] += 3 * diff / 16;
-    tmpbuffer[i+448] += 5 * diff / 16;
-    tmpbuffer[i+449] += 1 * diff / 16;
-    */
+    tmpbuffer[0] = buffer[0] * 5 - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
 
     while((++i) < 448){
-        oldpixel = tmpbuffer[i] * 6 - tmpbuffer[i-1] - tmpbuffer[i+1] - tmpbuffer[i+447] - tmpbuffer[i+448] - tmpbuffer[i+449];
+        tmpbuffer[i] = buffer[i] * 6 - buffer[i-1] - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
+    }
 
+    while((++i) < 448*239){
+        tmpbuffer[i] = buffer[i] * 9 - buffer[i-449] - buffer[i-448] - buffer[i-447] - buffer[i-1] - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
+    }
+
+    while((++i) < (448*240)-1){
+        tmpbuffer[i] = buffer[i] * 6 - buffer[i-1] - buffer[i+1] - buffer[i-447] - buffer[i-448] - buffer[i-449];
+    }
+    ++i;
+    tmpbuffer[i] = buffer[i] * 2 - buffer[i-1];
+
+    bzero(buffer, buf_len);
+
+    i = 0;
+    do{
+        oldpixel = tmpbuffer[i];
         if(oldpixel > LEDWAND_BIAS){
-            buffer[i>>3] |= 1 << (7-(i%8));
+            buffer[i>>3] |= 1 << (7-(i%8)); // hier ist das problem
             diff = oldpixel - 255;
-            if(oldpixel >= 255)
-                diff = 0;
         }
         else{
-            buffer[i>>3] |= 0 << (7-(i%8));
             diff = oldpixel;
-            if(oldpixel <= 0)
-                diff = 0;
+            buffer[i>>3] |= 0 << (7-(i%8)); // hier ist das problem
         }
         tmpbuffer[i+1] += 7 * diff / 16;
         tmpbuffer[i+447] += 3 * diff / 16;
         tmpbuffer[i+448] += 5 * diff / 16;
         tmpbuffer[i+449] += 1 * diff / 16;
 
-    }
-
-    while((++i) < 448*240){
-        oldpixel =  tmpbuffer[i] * 9 - tmpbuffer[i-449] - tmpbuffer[i-448] - tmpbuffer[i-447] -
-                    tmpbuffer[i-1] - tmpbuffer[i+1] -
-                    tmpbuffer[i+447] - tmpbuffer[i+448] - tmpbuffer[i+449];
-
-        if(oldpixel > LEDWAND_BIAS){
-            buffer[i>>3] |= 1 << (7-(i%8));
-            diff = oldpixel - 255;
-            if(oldpixel >= 255)
-                diff = 0;
-        }
-        else{
-            buffer[i>>3] |= 0 << (7-(i%8));
-            diff = oldpixel;
-            if(oldpixel <= 0)
-                diff = 0;
-        }
-        tmpbuffer[i+1] += 7 * diff / 16;
-        tmpbuffer[i+447] += 3 * diff / 16;
-        tmpbuffer[i+448] += 5 * diff / 16;
-        tmpbuffer[i+449] += 1 * diff / 16;
-
-    }
-
-#endif
+    }while((++i) < 448*240);
 
     for(i = 0, j = 0; i < 448*29; i+= 448+4*56, j+= 448){
         ledwand_send(ledwand, 18, j, 448, 0, 0, &buffer[i], 448);
