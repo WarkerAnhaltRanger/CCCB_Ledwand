@@ -129,4 +129,6 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
         ledwand_send(ledwand, 18, j, 448, 0, 0, &buffer[i], 448);
         usleep(400);
     }
+
+    free(buffer);
 }
