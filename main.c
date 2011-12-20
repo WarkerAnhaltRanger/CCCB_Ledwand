@@ -1,5 +1,6 @@
 #include "ledwand.h"
 #include <stdio.h>
+#include <unistd.h>
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 
@@ -47,21 +48,33 @@ int main(int argc, char **argv)
         perror("FEHLER beim init\n");
         return -1;
     }
+    char c;
     char movie[PATH_MAX], absmovie[PATH_MAX];
     char *text = "playing";
     int len = strnlen(text, 255);
+    int mute = 1;
 
     gst_init(&argc, &argv);
 
-    if (argc < 2) {
+    while (-1 != (c = getopt(argc, argv, "a")))
+	switch (c) {
+	    case 'a':
+		mute = 0;
+		break;
+	    default:
+		fprintf(stderr, "syntax error! usage: %s [-a] filename_or_URL\n", argv[0]);
+		return 1;
+	}
+
+    if (optind >= argc) {
 	fprintf(stderr, "must specify filename or URL parameter!\n");
 	return 1;
     }
-    if (strstr(argv[1], "://"))
-	snprintf(movie, sizeof(movie), "%s", argv[1]);
+    if (strstr(argv[optind], "://"))
+	snprintf(movie, sizeof(movie), "%s", argv[optind]);
     else {
-	if (!realpath(argv[1], absmovie)) {
-	    fprintf(stderr, "file '%s' not found!\n", argv[1]);
+	if (!realpath(argv[optind], absmovie)) {
+	    fprintf(stderr, "file '%s' not found!\n", argv[optind]);
 	    return 1;
 	} else
 	    snprintf(movie, sizeof(movie), "file://%s", absmovie);
@@ -88,7 +101,8 @@ int main(int argc, char **argv)
     gst_app_sink_set_emit_signals ((GstAppSink*) ledsink, TRUE);
     g_object_set(playbin2, "uri", movie, NULL);
     g_object_set(playbin2, "video-sink", ledsink, NULL);
-    g_object_set(playbin2, "flags", 0x01, NULL);
+    if (mute)
+	g_object_set(playbin2, "flags", 0x01, NULL);
     gst_bus_add_watch (omnibus, playbin2_bus_callback, NULL);
     g_signal_connect (ledsink, "new-buffer",  G_CALLBACK (on_new_buffer), NULL);
     loop = g_main_loop_new(NULL, FALSE);
