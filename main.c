@@ -47,13 +47,30 @@ int main(int argc, char **argv)
         perror("FEHLER beim init\n");
         return -1;
     }
+    char movie[PATH_MAX], absmovie[PATH_MAX];
     char *text = "playing";
     int len = strnlen(text, 255);
+
+    gst_init(&argc, &argv);
+
+    if (argc < 2) {
+	fprintf(stderr, "must specify filename or URL parameter!\n");
+	return 1;
+    }
+    if (strstr(argv[1], "://"))
+	snprintf(movie, sizeof(movie), "%s", argv[1]);
+    else {
+	if (!realpath(argv[1], absmovie)) {
+	    fprintf(stderr, "file '%s' not found!\n", argv[1]);
+	    return 1;
+	} else
+	    snprintf(movie, sizeof(movie), "file://%s", absmovie);
+    }
+    printf("playing '%s'...\n", movie);
+
     ledwand_clear(&ledwand);
     ledwand_send(&ledwand, ASCII, 0, 0, len, 1, (uint8_t*)text, len);
 
-
-    gst_init(&argc, &argv);
     GstElement *playbin2 = gst_element_factory_make("playbin2", "playbin2");
     GstElement *ledsink = gst_element_factory_make("appsink", "ledsink");
     GstCaps *caps = gst_caps_from_string("video/x-raw-gray, width=448, height=240");
@@ -69,7 +86,7 @@ int main(int argc, char **argv)
 
     g_object_set(G_OBJECT(ledsink), "caps", caps, NULL);
     gst_app_sink_set_emit_signals ((GstAppSink*) ledsink, TRUE);
-    g_object_set(playbin2, "uri", "file:///home/warker/tmp/quarks.mp4", NULL);
+    g_object_set(playbin2, "uri", movie, NULL);
     g_object_set(playbin2, "video-sink", ledsink, NULL);
     g_object_set(playbin2, "flags", 0x01, NULL);
     gst_bus_add_watch (omnibus, playbin2_bus_callback, NULL);
