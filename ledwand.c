@@ -126,7 +126,7 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
 
     }while((++i) < 448*240);
 
-    for(i = 0, j = 0; i < 448*29; i+= 448+4*56, j+= 448){
+    for(i = 0, j = 0; i < 448*29; i+= 448+3*56, j+= 448){
         ledwand_send(ledwand, 18, j, 448, 0, 0, &buffer[i], 448);
         usleep(400);
     }
