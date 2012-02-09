@@ -89,34 +89,35 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
     int16_t oldpixel = 0;
     signed short diff = 0;
 
-    tmpbuffer[0] = buffer[0] * 5 - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
+    /*tmpbuffer[0] = buffer[0] * 5 - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
 
     while((++i) < 448){
         tmpbuffer[i] = buffer[i] * 6 - buffer[i-1] - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
+    }*/
+
+    for(i=0; i < 449; ++i){
+        tmpbuffer[i] = buffer[i];
     }
 
-    while((++i) < 448*239){
+    for(i=449; i < ((448*239)-1); ++i){
         tmpbuffer[i] = buffer[i] * 9 - buffer[i-449] - buffer[i-448] - buffer[i-447] - buffer[i-1] - buffer[i+1] - buffer[i+447] - buffer[i+448] - buffer[i+449];
     }
 
-    while((++i) < (448*240)-1){
-        tmpbuffer[i] = buffer[i] * 6 - buffer[i-1] - buffer[i+1] - buffer[i-447] - buffer[i-448] - buffer[i-449];
+    for(i=(448*239); i < (448*240); ++i){
+        tmpbuffer[i] = buffer[i];
     }
-    ++i;
-    tmpbuffer[i] = buffer[i] * 2 - buffer[i-1];
-
     bzero(buffer, buf_len);
 
     i = 0;
     do{
         oldpixel = tmpbuffer[i];
         if(oldpixel > LEDWAND_BIAS){
-            buffer[i>>3] |= 1 << (7-(i%8)); // hier ist das problem
+            buffer[i>>3] |= 1 << (7-(i%8));
             diff = oldpixel - 255;
         }
         else{
             diff = oldpixel;
-            buffer[i>>3] |= 0 << (7-(i%8)); // hier ist das problem
+            buffer[i>>3] |= 0 << (7-(i%8));
         }
         tmpbuffer[i+1] += 7 * diff / 16;
         tmpbuffer[i+447] += 3 * diff / 16;
