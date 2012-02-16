@@ -42,8 +42,17 @@ static gboolean playbin2_bus_callback (GstBus *bus,GstMessage *message, gpointer
   return TRUE;
 }
 
+void print_usage(char **argv){
+    printf("usage: %s [-a] filename_or_URL\n\t-a\tenable audio\n", argv[0]);
+    exit(-1);
+}
+
 int main(int argc, char **argv)
 {
+    if(argc <= 1){
+        print_usage(argv);
+    }
+
     if(ledwand_init(&ledwand)){
         perror("FEHLER beim init\n");
         return -1;
@@ -61,9 +70,9 @@ int main(int argc, char **argv)
 	    case 'a':
 		mute = 0;
 		break;
-	    default:
-		fprintf(stderr, "syntax error! usage: %s [-a] filename_or_URL\n", argv[0]);
-		return 1;
+
+    default:
+		print_usage(argv);
 	}
 
     if (optind >= argc) {
