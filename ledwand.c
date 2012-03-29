@@ -85,7 +85,7 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
     }
 
     uint32_t i = 0, j = 0;
-    static signed short tmpbuffer[LEDWAND_PIXEL_X * LEDWAND_PIXEL_Y];
+    static signed short tmpbuffer[LEDWAND_PIXEL_X * LEDWAND_PIXEL_Y+449];
     int16_t oldpixel = 0;
     signed short diff = 0;
 
@@ -118,7 +118,7 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
         tmpbuffer[i+LEDWAND_PIXEL_X] += 5 * diff / 16;
         tmpbuffer[i+LEDWAND_PIXEL_X+1] += 1 * diff / 16;
 
-    }while((++i) < LEDWAND_PIXEL_X*LEDWAND_PIXEL_Y);
+    }while((++i) < (LEDWAND_PIXEL_X-1)*LEDWAND_PIXEL_Y-1);
 
     for(i = 0, j = 0; i < LEDWAND_PIXEL_X*(LEDWAND_MODULE_Y+9); i+= LEDWAND_PIXEL_X+3*LEDWAND_MODULE_X, j+= LEDWAND_PIXEL_X){
         ledwand_send(ledwand, 18, j, LEDWAND_PIXEL_X, 0, 0, &buffer[i], LEDWAND_PIXEL_X);

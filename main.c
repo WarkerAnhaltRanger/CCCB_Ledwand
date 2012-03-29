@@ -21,10 +21,11 @@ static GstFlowReturn on_new_buffer (GstAppSink* app_sink, gpointer user_data){
     return GST_FLOW_OK;
 }
 
-static void on_new_audio_buffer(GstElement *obj, gpointer user_data){
-    GstAppSink *app_sink = (GstAppSink*) obj;
+static GstFlowReturn on_new_audio_buffer(GstAppSink *app_sink, gpointer user_data){
+    //GstAppSink *app_sink = (GstAppSink*) obj;
     GstBuffer *buffer = gst_app_sink_pull_buffer(app_sink);
     em_audio_send(&em_audio, GST_BUFFER_DATA(buffer), GST_BUFFER_SIZE(buffer));
+    return GST_FLOW_OK;
 }
 
 static gboolean playbin2_bus_callback (GstBus *bus,GstMessage *message, gpointer data) {
@@ -134,6 +135,7 @@ int main(int argc, char **argv)
     ledsink_callbacks.eos = NULL;
     ledsink_callbacks.new_preroll = NULL;
     ledsink_callbacks.new_buffer = on_new_buffer;
+    ledsink_callbacks.new_buffer_list = NULL;
     gst_app_sink_set_callbacks(ledsink, &ledsink_callbacks, NULL, NULL);
 
     GstAppSink *audio_sink = NULL;
@@ -174,14 +176,13 @@ int main(int argc, char **argv)
 
     // cleanup
     gst_element_set_state(playbin2, GST_STATE_NULL);
-    close(ledwand.s_sock);
     gst_object_unref(GST_OBJECT(ledsink));
 
     if(flags & EMBD_FLAG){
         close(em_audio.s_sock);
         gst_object_unref(GST_OBJECT(audio_sink));
     }
-    //ledwand_delete(&ledwand);
+    close(ledwand.s_sock);
     //gst_object_unref(GST_OBJECT(omnibus));
     //gst_object_unref(GST_OBJECT(playbin2));
     //gst_object_unref(GST_OBJECT(loop));
