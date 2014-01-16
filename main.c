@@ -75,6 +75,8 @@ int main(int argc, char **argv)
     char c;
     char movie[PATH_MAX], absmovie[PATH_MAX];
     char *text = "playing";
+    char *text_end = "TEH END";
+    int len_end = strnlen(text_end, 255);
     int len = strnlen(text, 255);
     int flags = 0;
 
@@ -84,8 +86,21 @@ int main(int argc, char **argv)
     GstElement *playbin2 = gst_element_factory_make("playbin2", "playbin2");
     GstAppSink *ledsink = GST_APP_SINK(gst_element_factory_make("appsink", "ledsink"));
     GstCaps *caps = gst_caps_from_string("video/x-raw-gray, width=448, height=240");
-
     GstBus *omnibus = gst_pipeline_get_bus(GST_PIPELINE(playbin2));
+
+    // snip
+    GstElement *vpipe = gst_pipeline_new("vpipe");
+    GstElement *aspect = gst_element_factory_make ("aspectratiocrop", "aspect");
+    if(!aspect){
+        perror("Aspect Failed!!!\n");
+        return -1;
+    }
+    gst_bin_add_many(GstPipeline(vpipe), aspect, ledsink, NULL);
+    gst_element_link_many(aspect, ledsink, NULL);
+    g_object_set(G_OBJECT(aspect), "caps", "aspect-ratio=448/240");
+    // snap
+
+
     if(!playbin2 || !ledsink || !caps){
         perror("Konnte Elemente nicht erzeugen\n");
         return -1;
@@ -128,9 +143,18 @@ int main(int argc, char **argv)
 
 
     g_object_set(G_OBJECT(ledsink), "caps", caps, NULL);
-    g_object_set(playbin2, "video-sink", ledsink, NULL);
-    //gst_app_sink_set_emit_signals (ledsink, TRUE);
-    //g_signal_connect(ledsink, "new-buffer",  G_CALLBACK (on_new_buffer), NULL);
+
+
+    // snip
+
+    g_object_set(playbin2, "video-sink", aspect, null)
+
+    // snap
+
+
+    //g_object_set(playbin2, "video-sink", ledsink, NULL);
+    gst_app_sink_set_emit_signals (ledsink, TRUE);
+    g_signal_connect(ledsink, "new-buffer",  G_CALLBACK (on_new_buffer), NULL);
 
     ledsink_callbacks.eos = NULL;
     ledsink_callbacks.new_preroll = NULL;
@@ -182,6 +206,11 @@ int main(int argc, char **argv)
         close(em_audio.s_sock);
         gst_object_unref(GST_OBJECT(audio_sink));
     }
+
+    ledwand_clear(&ledwand);
+    ledwand_send(&ledwand, ASCII, 25, 9, len, 1, (uint8_t*)text_end, len_end);
+
+
     close(ledwand.s_sock);
     //gst_object_unref(GST_OBJECT(omnibus));
     //gst_object_unref(GST_OBJECT(playbin2));

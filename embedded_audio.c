@@ -7,7 +7,7 @@ int em_audio_init(Em_Audio *em_audio){
 
     bzero(&em_audio->s_addr, sizeof(em_audio->s_addr));
     em_audio->s_addr.sin_family = AF_INET;
-    em_audio->s_addr.sin_port = htons(2342);
+    em_audio->s_addr.sin_port = htons(EM_PORT);
     if(!inet_aton(EM_IP, &em_audio->s_addr.sin_addr)){
         perror("inet_aton failed for Embedded_Audio\n");
         return -1;
@@ -29,7 +29,7 @@ void em_audio_send(Em_Audio *em_audio, uint8_t *frame, const uint32_t framelen){
     Em_Audio_Data adata;
 
     adata.type = htons(AUDIO_FRAME);
-    adata.seq = htons(em_audio->frame_no++);
+    adata.seq = htonl(em_audio->frame_no++);
     adata.len = htonl(framelen + sizeof(adata));
 
     uint32_t len = sizeof(adata);
