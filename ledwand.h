@@ -9,6 +9,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <netdb.h>
+#include <zlib.h>
+
 
 #define LEDWAND_MODULE_PIXEL_X 8
 #define LEDWAND_MODULE_PIXEL_Y 12
@@ -22,16 +25,34 @@
 #define LEDWAND_BIAS 127
 
 #define LEDWAND_BUFSIZE 65535
+
+#define LEDWAND_UDPLITE_CHECK 18
+
+#define UDPLITE_SEND_CSCOV 10
+
 //#define LEDWAND_IP "172.23.42.29"
 //#define LEDWAND_IP "195.160.173.4"
-#define LEDWAND_IP "172.23.42.47"
+//#define LEDWAND_IP "172.23.42.47"
 //#define LEDWAND_IP "92.226.53.156"
+#define LEDWAND_IP "151.217.66.25"
+//#define LEDWAND_IP "::FFFF:151.217.66.25"
+//#define LEDWAND_IP "151.217.66.44"
 
-enum CMD {CLEAR = 2, ASCII = 3, SET_BRIGHTNESS = 7, REDRAW = 8, HARD_RESET = 11, REFRESH = 17, LED_DRAW = 18};
+#define LEDWAND_PORT "2342"
+
+enum CMD {
+    CLEAR = 2,
+    ASCII = 3,
+    SET_BRIGHTNESS = 7,
+    REDRAW = 8,
+    HARD_RESET = 11,
+    REFRESH = 17,
+    LED_DRAW = 18
+};
 
 typedef struct Ledwand {
     int s_sock;
-    struct sockaddr_in s_addr;
+    struct sockaddr_storage s_addr;
 } Ledwand;
 
 typedef struct Request {

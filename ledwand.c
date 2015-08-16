@@ -2,10 +2,10 @@
 
 #include "ledwand_data.h"
 
-#include <zlib.h>
-
 /* more readable -Weverything */
 #define UNUSED __attribute__((__unused__))
+
+#define G_DISABLE_CAST_CHECKS TRUE
 
 /* uncomment to see old & new in parallel */
 //#define DITHER_TEST_SPLITSCREEN
@@ -16,18 +16,31 @@ int ledwand_init(Ledwand *ledwand){
         ledwand = malloc(sizeof(*ledwand));
     }
 
-    bzero(&ledwand->s_addr, sizeof(ledwand->s_addr));
-    ledwand->s_addr.sin_family = AF_INET;
-    ledwand->s_addr.sin_port = htons(2342);
-    if(!inet_aton(LEDWAND_IP, &ledwand->s_addr.sin_addr)){
-        perror("inet_aton failed\n");
+    struct addrinfo hint;
+    bzero(&hint, sizeof(hint));
+    hint.ai_family = AF_UNSPEC;
+    hint.ai_socktype = SOCK_DGRAM;
+    hint.ai_protocol = IPPROTO_UDPLITE;
+
+    struct addrinfo* res = NULL;
+    int errorcode = getaddrinfo(LEDWAND_IP, LEDWAND_PORT, &hint, &res);
+    if(errorcode){
+        printf("getaddrinfo failed with errorcode %d (%s)\n", errorcode, gai_strerror(errorcode));
         return -1;
     }
 
-    if((ledwand->s_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1){
+    memcpy(&ledwand->s_addr, res->ai_addr, res->ai_addrlen);
+
+
+    if((ledwand->s_sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) {
         perror("socket failed\n");
         return -1;
     }
+
+    freeaddrinfo(res);
+
+    int val = LEDWAND_UDPLITE_CHECK;
+    (void)setsockopt(ledwand->s_sock, IPPROTO_UDPLITE, UDPLITE_SEND_CSCOV, &val, sizeof val);
 
     return 0;
 }
@@ -68,14 +81,10 @@ void ledwand_send(const Ledwand *ledwand,
     }
 }
 
-void ledwand_draw_buffer(const Ledwand *ledwand, const uint8_t *buf, const uint32_t UNUSED buflen){
-
-    uint32_t i = LEDWAND_PARTS, step = 0;
-    do{
-        ledwand_send(ledwand, LED_DRAW, step, LEDWAND_PARTSIZE, 0, 0, buf+step, step);
-        step += LEDWAND_PARTSIZE;
-//      usleep(400);
-    } while(--i);
+void ledwand_draw_buffer(const Ledwand *ledwand, const uint8_t *buf, const uint32_t UNUSED buflen)
+{
+	printf("blub\n");
+        ledwand_send(ledwand, LED_DRAW, 0, 0, 0, 0, buf, buflen);
 }
 
 void ledwand_clear(const Ledwand *ledwand){
@@ -87,7 +96,7 @@ void ledwand_set_brightness(const Ledwand *ledwand, const uint8_t brightness){
 }
 
 /* (1) brightness correction XXX */
-static inline void image_histogram_correction( uint8_t * buffer ) { /* {{{ */
+void image_histogram_correction( uint8_t * buffer ) { /* {{{ */
     /* (pixel-pre_offset)*factor+post_offset : stuff below pre_offset will be
      * pulled into negative, hence not scaled out of cut off area when
      * multiplying with factor.  Awesome for starfields on not-exactly black.
@@ -131,7 +140,7 @@ static inline void image_histogram_correction( uint8_t * buffer ) { /* {{{ */
 /* }}} */
 
 /* (2) blur XXX */
-static inline void image_blur( uint8_t * in, uint8_t * out ) { /* {{{ */
+void image_blur( uint8_t * in, uint8_t * out ) { /* {{{ */
     /* copy first line */
     for ( size_t x = 0; x < LEDWAND_PIXEL_X ; x++ ) { out[x] = in[x]; }
     /* process image */
@@ -167,7 +176,7 @@ static inline void image_blur( uint8_t * in, uint8_t * out ) { /* {{{ */
 } /* }}} */
 
 /* (3) sharpen TODO */
-static inline void image_sharpen( uint8_t * in, uint8_t * out ) { /* {{{ */
+void image_sharpen( uint8_t * in, uint8_t * out ) { /* {{{ */
     /* NOTE precarious optimization: blur & sharpen don't touch border, hence
      * assume that it is already in `out` and do not copy again */
     for ( size_t y = 1; y < LEDWAND_PIXEL_Y-1; y++ ) {
@@ -189,7 +198,7 @@ static inline void image_sharpen( uint8_t * in, uint8_t * out ) { /* {{{ */
 
 #define LASTLINE_FIRSTPIXEL (LEDWAND_PIXEL_X*(LEDWAND_PIXEL_Y-1)+1)
 
-static inline void sub_image_dither_floydsteinberg( size_t i, ssize_t dir, uint8_t * in, uint8_t * out ) {
+inline void sub_image_dither_floydsteinberg( size_t i, ssize_t dir, uint8_t * in, uint8_t * out ) {
     signed short diff;
     int d, oldpixel = in[i];
     if (oldpixel > LEDWAND_BIAS) {
@@ -241,7 +250,7 @@ static inline void sub_image_dither_ostromoukhov( size_t i, ssize_t dir, uint8_t
 /* }}} */
 
 #ifdef DITHER_TEST_SPLITSCREEN /* {{{ */
-static inline void image_dither( uint8_t * in, uint8_t * out ) {
+void image_dither( uint8_t * in, uint8_t * out ) {
     for ( size_t y = 0 ; y < LEDWAND_PIXEL_Y ; y++ ) {
         size_t base = y*LEDWAND_PIXEL_X;
         /* left half */
@@ -261,7 +270,7 @@ static inline void image_dither( uint8_t * in, uint8_t * out ) {
     }
 }
 #else /* }}} */
-static inline void image_dither( uint8_t * in, uint8_t * out ) { /* {{{ */
+void image_dither( uint8_t * in, uint8_t * out ) { /* {{{ */
     for ( size_t y = 0 ; y < LEDWAND_PIXEL_Y ; y++ ) {
         size_t base = y*LEDWAND_PIXEL_X;
         if ( y%2 == 0 ) {
@@ -283,10 +292,10 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
     uint16_t *b16 = (uint16_t *)buf;
     z_stream zs;
 
-    if (buf_len != (LEDWAND_PIXEL_X * LEDWAND_PIXEL_Y)) {
-        //printf("Buffer size (%d) should be 448*240\n", buf_len);
+    /*if (buf_len != (LEDWAND_PIXEL_X * LEDWAND_PIXEL_Y)) {
+        printf("Buffer size (%d) should be 448*240\n", buf_len);
         return;
-    }
+    }*/
 
     uint8_t tmpbuf[LEDWAND_PIXEL_X*LEDWAND_PIXEL_Y];
     /*
@@ -303,10 +312,10 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
     memset(buf, 0, 10);
     b16[0] = ntohs(18);
     b16[2] = ntohs((sizeof buf) - 10);
-    b16[3] = ntohs(0x677a);
+    b16[3] = ntohs(0x677a); // 0x677a = "gz"
 
     memset(&zs, 0, sizeof zs);
-    if (Z_OK != deflateInit(&zs, 9)) {
+    if (Z_OK != deflateInit(&zs, Z_BEST_SPEED)) {
        perror("deflateInit");
        return;
     }
@@ -332,14 +341,15 @@ void ledwand_draw_image(const Ledwand *ledwand, uint8_t *buffer, const uint32_t 
         return;
     }
 
+    //printf("sizeof buf = %ld \t avail_out = %d  \t total_out = %ld\n", sizeof buf, zs.avail_out, zs.total_out);
+
     if (Z_OK != deflateEnd(&zs)) {
        perror("deflateEnd");
        return;
     }
 
+    // zs.total_out + sizeof z_stream
     if (-1 == sendto(ledwand->s_sock, buf, sizeof buf - zs.avail_out, 0, (struct sockaddr*)&ledwand->s_addr, sizeof ledwand->s_addr))
         perror("send");
 
-    free( buffer );
 }
-

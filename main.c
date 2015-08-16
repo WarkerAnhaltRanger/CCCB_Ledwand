@@ -1,47 +1,62 @@
 #include "ledwand.h"
-#include "embedded_audio.h"
-#include <stdio.h>
-#include <unistd.h>
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include <gst/video/video.h>
 
 #define MUTE_FLAG (1 << 0)
-#define EMBD_FLAG (1 << 1)
+#define VIS_FLAG  (1 << 3)
 
 static GMainLoop *loop;
 static Ledwand ledwand;
-static Em_Audio em_audio;
 
-static GstAppSinkCallbacks ledsink_callbacks;
+static GstVideoInfo video_info;
 
+/*
+Callback for new frames
+*/
 static GstFlowReturn on_new_buffer (GstAppSink* app_sink, gpointer user_data){
-    //GstAppSink *app_sink = (GstAppSink*) object;
-    GstBuffer *buffer = gst_app_sink_pull_buffer(app_sink);
-    ledwand_draw_image(&ledwand, GST_BUFFER_DATA(buffer), GST_BUFFER_SIZE(buffer));
+    //GstMapInfo map;
+    GstVideoFrame frame;
+
+    GstSample *sample = gst_app_sink_pull_sample(app_sink);
+    GstBuffer *buffer = gst_sample_get_buffer(sample);
+    //gst_buffer_map(buffer, &map, GST_MAP_READ);
+    //ledwand_draw_image(&ledwand, map.data, map.size);
+    //gst_buffer_unmap(buffer, &map);
+    gst_video_frame_map(&frame, &video_info, buffer, GST_MAP_READ);
+    ledwand_draw_image(&ledwand, frame.map[0].data, frame.map[0].size/1.5); // devide by 1.5 becaus i420 has 12bits per pixel
+
+    gst_video_frame_unmap(&frame);
+    //gst_buffer_unmap(buffer);
+    gst_sample_unref(sample);
     return GST_FLOW_OK;
 }
 
-static GstFlowReturn on_new_audio_buffer(GstAppSink *app_sink, gpointer user_data){
-    //GstAppSink *app_sink = (GstAppSink*) obj;
-    GstBuffer *buffer = gst_app_sink_pull_buffer(app_sink);
-    em_audio_send(&em_audio, GST_BUFFER_DATA(buffer), GST_BUFFER_SIZE(buffer));
-    return GST_FLOW_OK;
-}
-
-static gboolean playbin2_bus_callback (GstBus *bus,GstMessage *message, gpointer data) {
+/*
+boilerplate event handing code
+*/
+static gboolean playbin_bus_callback (GstBus *bus,GstMessage *message, gpointer data) {
   //g_print ("Got %s message\n", GST_MESSAGE_TYPE_NAME (message));
   switch (GST_MESSAGE_TYPE (message)) {
     case GST_MESSAGE_ERROR: {
       GError *err;
       gchar *debug;
-
       gst_message_parse_error (message, &err, &debug);
       g_print ("Error: %s\n", err->message);
+      ledwand_clear(&ledwand);
+      ledwand_send(&ledwand, ASCII, 0, 0, strnlen(err->message, 255), 1, (uint8_t*)err->message, strnlen(err->message, 255));
       g_error_free (err);
       g_free (debug);
 
       g_main_loop_quit (loop);
       break;
+    }
+
+    case GST_MESSAGE_BUFFERING: {
+        int percent = 0;
+        gst_message_parse_buffering (message, &percent);
+        g_print ("Buffering (%u percent done)", percent);
+        break;
     }
 
     case GST_MESSAGE_EOS:
@@ -79,49 +94,36 @@ int main(int argc, char **argv)
     int len_end = strnlen(text_end, 255);
     int len = strnlen(text, 255);
     int flags = 0;
+    int opt_flags = 0;
 
     gst_init(&argc, &argv);
 
 
-    GstElement *playbin2 = gst_element_factory_make("playbin2", "playbin2");
+    GstElement *playbin = gst_element_factory_make("playbin", "playbin");
     GstAppSink *ledsink = GST_APP_SINK(gst_element_factory_make("appsink", "ledsink"));
-    GstCaps *caps = gst_caps_from_string("video/x-raw-gray, width=448, height=240");
-    GstBus *omnibus = gst_pipeline_get_bus(GST_PIPELINE(playbin2));
-
-    // snip
-    GstElement *vpipe = gst_pipeline_new("vpipe");
-    GstElement *aspect = gst_element_factory_make ("aspectratiocrop", "aspect");
-    if(!aspect){
-        perror("Aspect Failed!!!\n");
+    GstCaps *caps = gst_caps_from_string("video/x-raw, format=I420, width=448, height=240");
+    if(!gst_video_info_from_caps(&video_info, caps)){
+        perror("Error while parsing video info!\n");
         return -1;
     }
-    gst_bin_add_many(GstPipeline(vpipe), aspect, ledsink, NULL);
-    gst_element_link_many(aspect, ledsink, NULL);
-    g_object_set(G_OBJECT(aspect), "caps", "aspect-ratio=448/240");
-    // snap
+    gst_app_sink_set_caps(ledsink, caps);
 
+    GstBus *omnibus = gst_pipeline_get_bus(GST_PIPELINE(playbin));
 
-    if(!playbin2 || !ledsink || !caps){
-        perror("Konnte Elemente nicht erzeugen\n");
+    if(!playbin || !ledsink || !omnibus){
+        perror("Error while creating elements\n");
         return -1;
     }
-    if(!omnibus){
-        perror("Konnte Bus nicht erzeugen\n");
-        return -1;
-    }
-    gst_bus_add_watch (omnibus, playbin2_bus_callback, NULL);
 
-    while (-1 != (c = getopt(argc, argv, "ae")))
+    gst_bus_add_watch (omnibus, playbin_bus_callback, NULL);
+    gst_object_unref(GST_OBJECT(omnibus));
+
+    while (-1 != (c = getopt(argc, argv, "a")))
 	switch (c) {
 	    case 'a':{
-            flags |= MUTE_FLAG;
+            opt_flags |= MUTE_FLAG;
             break;
 	    }
-
-		case 'e':{
-            flags |= EMBD_FLAG;
-            break;
-		}
 
     default:
 		print_usage(argv);
@@ -131,9 +133,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "must specify filename or URL parameter!\n");
         return 1;
     }
+
     if (strstr(argv[optind], "://"))
         snprintf(movie, sizeof(movie), "%s", argv[optind]);
     else {
+
         if (!realpath(argv[optind], absmovie)) {
             fprintf(stderr, "file '%s' not found!\n", argv[optind]);
             return 1;
@@ -141,79 +145,43 @@ int main(int argc, char **argv)
             snprintf(movie, sizeof(movie), "file://%s", absmovie);
     }
 
+    g_object_set(playbin, "video-sink", ledsink, NULL);
 
-    g_object_set(G_OBJECT(ledsink), "caps", caps, NULL);
+    gst_object_unref(GST_OBJECT(ledsink));
 
+    GstAppSinkCallbacks ledsink_callbacks;
 
-    // snip
-
-    g_object_set(playbin2, "video-sink", aspect, null)
-
-    // snap
-
-
-    //g_object_set(playbin2, "video-sink", ledsink, NULL);
-    gst_app_sink_set_emit_signals (ledsink, TRUE);
-    g_signal_connect(ledsink, "new-buffer",  G_CALLBACK (on_new_buffer), NULL);
-
-    ledsink_callbacks.eos = NULL;
-    ledsink_callbacks.new_preroll = NULL;
-    ledsink_callbacks.new_buffer = on_new_buffer;
-    ledsink_callbacks.new_buffer_list = NULL;
+    ledsink_callbacks.new_sample = on_new_buffer;
     gst_app_sink_set_callbacks(ledsink, &ledsink_callbacks, NULL, NULL);
-
-    GstAppSink *audio_sink = NULL;
-    GstElement *audio_convert = NULL;
-
-    if(flags & EMBD_FLAG){
-        audio_sink  = GST_APP_SINK(gst_element_factory_make("appsink", "eaudiosink"));
-        audio_convert = gst_element_factory_make("lamemp3enc", "audio_convert");
-        if(!audio_sink && !audio_convert){
-            g_error("Fuckup mit dem embd audio");
-            return -1;
-        }
-        gst_element_link_many(audio_convert, GST_ELEMENT(audio_sink), NULL);
-
-        if(em_audio_init(&em_audio)){
-            g_error("Embedded Audio Fuckup!");
-            return -1;
-        }
-
-        g_object_set(playbin2, "audio_sink", audio_convert, NULL);
-        gst_app_sink_set_emit_signals(audio_sink, TRUE);
-        g_signal_connect(audio_sink, "new-buffer", G_CALLBACK(on_new_audio_buffer), NULL);
-    }
-
 
     ledwand_clear(&ledwand);
     ledwand_send(&ledwand, ASCII, 0, 0, len, 1, (uint8_t*)text, len);
 
-    if (!flags & MUTE_FLAG){
-        g_object_set(playbin2, "flags", 0x01, NULL);
+    g_object_get (playbin, "flags", &flags, NULL);
+    if (opt_flags & MUTE_FLAG){
+        flags = 0x01;
     }
+    else{
+        flags |= VIS_FLAG;
+    }
+    g_object_set(playbin, "flags", flags , NULL);
 
-    g_object_set(playbin2, "uri", movie, NULL);
+    g_object_set(playbin, "uri", movie, NULL);
     loop = g_main_loop_new(NULL, FALSE);
     g_print("playing!\n");
-    gst_element_set_state (playbin2, GST_STATE_PLAYING);
+    gst_element_set_state (playbin, GST_STATE_PLAYING);
     g_main_loop_run(loop);
 
-    // cleanup
-    gst_element_set_state(playbin2, GST_STATE_NULL);
-    gst_object_unref(GST_OBJECT(ledsink));
+    gst_element_set_state(playbin, GST_STATE_NULL);
+    gst_object_unref(playbin);
 
-    if(flags & EMBD_FLAG){
-        close(em_audio.s_sock);
-        gst_object_unref(GST_OBJECT(audio_sink));
-    }
-
-    ledwand_clear(&ledwand);
+    //ledwand_clear(&ledwand);
     ledwand_send(&ledwand, ASCII, 25, 9, len, 1, (uint8_t*)text_end, len_end);
 
 
     close(ledwand.s_sock);
     //gst_object_unref(GST_OBJECT(omnibus));
-    //gst_object_unref(GST_OBJECT(playbin2));
+    //gst_object_unref(GST_OBJECT(playbin));
     //gst_object_unref(GST_OBJECT(loop));
     return 0;
 }
